@@ -1,0 +1,13 @@
+<launch>
+  <arg name="custom_param_file" default="$(find turtlebot_interface)/config/move_base_config.yaml"/>
+
+  <!-- Aruco Detection -->
+  <include file="$(find aruco)/launch/aruco_detection.launch"/>
+
+  <!-- Controller -->
+  <node name="basic_controller" pkg="aruco" type="controller.py"/>
+
+  <!-- Navigation -->
+  <include file="$(find turtlebot_interface)/launch/navigation.launch"/>
+
+</launch>

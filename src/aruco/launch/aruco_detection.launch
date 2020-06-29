@@ -1,0 +1,29 @@
+<launch>
+  <arg name="camera_frame" default="camera_rgb_frame"/>
+  <arg name="camera_ns" default="/camera/rgb"/>
+  <arg name="image" default="image_raw"/>
+  <arg name="display_video" default="false"/>
+  <arg name="markerSize"      default="0.096"/> <!-- in m -->
+	<arg name="ref_frame"       default=""/> <!-- leave empty and the pose will be published wrt param parent_name -->
+  <arg name="rviz" default="true"/>
+
+  <include file="$(find turtlebot_bringup)/launch/3dsensor.launch"/>
+
+  <node name="aruco_marker_publisher" pkg="aruco_ros" type="marker_publisher" output="screen">
+    <remap from="/camera_info"       to="$(arg camera_ns)/camera_info" />
+    <remap from="/image"             to="$(arg camera_ns)/$(arg image)" />
+    <param name="image_is_rectified" value="True"/>
+    <param name="marker_size"        value="$(arg markerSize)"/>
+    <param name="reference_frame"    value="$(arg ref_frame)"/> <!-- frame in which the marker pose will be refered -->
+    <param name="camera_frame"       value="dummy_camera_frame"/>
+  </node>
+
+  <node name="aruco_tracker" pkg="aruco" type="marker_br.py">
+    <param name="frame_id" value="dummy_camera_frame"/>
+  </node>
+
+  <!-- Publish dummy camera frame b/c aruco_ros pkg assume camera optical axis is z-axis -->
+  <node name="dummy_camera_tf" pkg="tf" type="static_transform_publisher"
+	args="0 0 0 -1.57079632679 0 -1.57079632679 $(arg camera_frame) dummy_camera_frame 100"/>
+
+</launch>

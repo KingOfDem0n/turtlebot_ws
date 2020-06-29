@@ -1,0 +1,18 @@
+<launch>
+  <!-- 3D sensor -->
+  <arg name="3d_sensor" default="$(env TURTLEBOT_3D_SENSOR)"/> 
+
+  <include file="$(find turtlebot_bringup)/launch/3dsensor.launch">
+    <arg name="rgb_processing" value="false" />
+    <arg name="depth_registration" value="false" />
+    <arg name="depth_processing" value="false" />
+    <arg name="scan_topic" value="/scan" />
+  </include>
+
+  <!-- Gmapping -->
+  <include file="$(find turtlebot_navigation)/launch/includes/gmapping/$(arg 3d_sensor)_gmapping.launch.xml">
+    <!-- Turtlebot package already loaded with gmapping configuration, but we can override them here -->
+    <rosparam command="load" file="$(find turtlebot_interface)/config/gmapping_config.yaml"/>
+  </include>
+
+</launch>
