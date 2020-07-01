@@ -5,6 +5,6 @@
   <include file="$(find aruco)/launch/aruco_detection.launch"/>
 
   <!-- Controller -->
-  <node name="basic_controller" pkg="aruco" type="controller.py"/>
+  <node name="PBVS_controller" pkg="aruco" type="controller.py"/>
 
 </launch>
