@@ -1,0 +1,7 @@
+<launch>
+  <!-- PBVS Controller -->
+  <include file="$(find aruco)/launch/controller_demo.launch"/>
+
+  <node name="rviz" pkg="rviz" type="rviz"
+	args=""/>
+</launch>

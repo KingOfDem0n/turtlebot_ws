@@ -7,7 +7,4 @@
   <!-- Controller -->
   <node name="basic_controller" pkg="aruco" type="controller.py"/>
 
-  <!-- Navigation -->
-  <include file="$(find turtlebot_interface)/launch/navigation.launch"/>
-
 </launch>
