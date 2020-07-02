@@ -21,4 +21,4 @@ roslaunch turtlebot_interface navigate.launch
 
 # To run PBVS
 
-WIP
+roslaunch turtlebot_interface PBVS.launch debug:=false
