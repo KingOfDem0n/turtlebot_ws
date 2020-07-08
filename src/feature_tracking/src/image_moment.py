@@ -1,11 +1,17 @@
 #!/usr/bin/env python
 
+# Reference for HuMoments code: https://www.learnopencv.com/shape-matching-using-hu-moments-c-python/
 import rospy
 import cv2 as cv
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
 import numpy as np
+from math import *
 
 from dynamic_reconfigure.server import Server
 from feature_tracking.cfg import Feature_trackingConfig
+
+# TODO: Create a fucntion to merge overlapping boxes together
 
 def shutdown_hook():
     global CTRL_C, cap
@@ -22,104 +28,132 @@ def param_update(config, level):
 
     return config
 
+def color_classification(frame):
+    frame_copy = frame.copy()
+    hsv = cv.cvtColor(frame_copy, cv.COLOR_BGR2HSV)
+
+    lower = np.array([30, 80, 80]) # 25, 52, 72
+    upper = np.array([60, 255, 255])
+
+    mask = cv.inRange(hsv, lower, upper)
+
+    out = cv.bitwise_and(frame, frame, mask=mask)
+
+    bgr = cv.cvtColor(out, cv.COLOR_HSV2BGR)
+    gray = cv.cvtColor(bgr, cv.COLOR_BGR2GRAY)
+
+    _ , thresh = cv.threshold(gray, 60, 255, cv.THRESH_BINARY)
+
+    blurred = filter(thresh)
+
+    return blurred
+
 def binary_classification(frame, threshold):
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
     _ , thresh = cv.threshold(gray, threshold, 255, cv.THRESH_BINARY)
+    filtered = filter(thresh)
 
-    return thresh
+    return filtered
+
+def filter(frame):
+    global median_kernel
+
+    kernel = np.ones((5,5), np.uint8)
+    open = cv.morphologyEx(frame, cv.MORPH_OPEN, kernel)
+    blurred = cv.medianBlur(open, int((median_kernel+1)*2+1))
+
+    return blurred
 
 def image_representation(frame):
-    global median_kernel
-    blurred = cv.medianBlur(frame, int((median_kernel+1)*2+1))
-
-    _, labels = cv.connectedComponents(blurred)
+    _, labels = cv.connectedComponents(frame)
     labels = np.uint8(labels)
 
-    _, contours, _ = cv.findContours(labels, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-
-    moments = map(cv.moments, contours)
-    moments_and_contours = zip(moments, contours)
-    moments_and_contours = sorted(moments_and_contours, key=lambda x: x[0]["m00"], reverse=True)
-
-    return np.array(moments_and_contours)
+    return labels
 
 def calculate_center(moment):
     try:
-        if moment["m00"] >= 0:
-            center_x = int(round(moment["m10"]/moment["m00"]))
-            center_y = int(round(moment["m01"]/moment["m00"]))
-        else:
-            center_x = -1
-            center_y = -1
+        center_x = int(round(moment["m10"]/moment["m00"]))
+        center_y = int(round(moment["m01"]/moment["m00"]))
     except:
-        center_x = 0
-        center_y = 0
+        center_x = -1
+        center_y = -1
     return (center_x, center_y)
 
-def draw_contours(frame, moments_and_contours, drawn_num=3):
+def feature_extraction(labels):
+    _, contours, _ = cv.findContours(labels, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    moments = map(cv.moments, contours)
+    centers = map(calculate_center, moments)
+    huMoments = map(cv.HuMoments, moments)
+
+    for hm in huMoments:
+        for i in range(0,7):
+            hm[i] = -1* copysign(1.0, hm[i]) * log10(abs(hm[i]+np.finfo(float).eps))
+
+    return centers, huMoments, contours
+
+def draw_boxes(frame, centers, huMoments, contours):
     frame_copy = frame.copy()
-    centers = map(calculate_center, moments_and_contours[:drawn_num, 0])
-    phi = map(calculate_feature, moments_and_contours[:drawn_num, 0])
+
+    combined = sorted(zip(centers, contours, huMoments), key=lambda x: cv.contourArea(x[1]), reverse=True)
+
+    # i = 0
+    # while i < len(combined)-1:
+    #     offset = 0
+    #     x1,y1,w1,h1 = cv.boundingRect(combined[i][1])
+    #     x1 = int(x1*(0.9))
+    #     y1 = int(y1*(0.9))
+    #     w1 = int(w1*(1.3))
+    #     h1 = int(h1*(1.3))
+    #     polygon = Polygon([(x1, y1), (x1, y1+h1), (x1+w1, y1+h1), (x1+w1, y1)])
+    #     for j in range(i, len(combined)):
+    #         center = combined[0]
+    #         x2,y2,w2,h2 = cv.boundingRect(combined[j-offset][1])
+    #         x2 = int(x2*(0.9))
+    #         y2 = int(y2*(0.9))
+    #         w2 = int(w2*(1.3))
+    #         h2 = int(h2*(1.3))
+    #         points = []
+    #         points.append(Point(center[0],center[1]))
+    #         points.append(Point(x2,y2))
+    #         points.append(Point(x2+w2,y2))
+    #         points.append(Point(x2+w2,y2+h2))
+    #         points.append(Point(x2,y2+h2))
+    #
+    #         if polygon.contains(points[0]):
+    #             combined.pop(j-offset)
+    #             offset += 1
+    #
+    #         # for point in points:
+    #         #     if polygon.contains(point):
+    #         #         combined.pop(j-offset)
+    #         #         offset += 1
+    #         #         break
+    #     i += 1
+
+    for center, c, hu in combined:
+        x,y,w,h = cv.boundingRect(c)
+        x = int(x*(0.9))
+        y = int(y*(0.9))
+        w = int(w*(1.3))
+        h = int(h*(1.3))
+        cv.rectangle(frame_copy,(x,y),(x+w,y+h),(0,255,0),2)
+        output_str = str(round(hu[0],2)) + "|" + str(round(hu[1],2)) + "|" + str(round(hu[2],2))
+        cv.putText(frame_copy, output_str, center, cv.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
+
+    return frame_copy
+
+def draw_contours(frame, centers, huMoments, contours):
+    frame_copy = frame.copy()
 
     # Draw contours and mark center dot
-    result = cv.drawContours(frame_copy, moments_and_contours[:drawn_num, 1], -1, (0, 255, 0), 3)
-    for center, p in zip(centers, phi):
+    result = cv.drawContours(frame_copy, contours, -1, (0, 255, 0), 3)
+    for center, p in zip(centers, huMoments):
         if center[0] != -1:
             result = cv.circle(result, center, 5, (255,0,0), -1)
-            result = cv.putText(result, str(round(p[0], 2)), center, cv.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 3)
+            output_str = str(round(p[0],2)) + "|" + str(round(p[1],2)) + "|" + str(round(p[2],2))
+            result = cv.putText(result, output_str, center, cv.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
 
     return result
-
-def calculate_feature(moment):
-    # Calculate centeral momentum
-    x, y = calculate_center(moment)
-    u = np.zeros((4,4))
-    u[1,1] = moment["m11"] - moment["m10"]*y
-    u[2,0] = moment["m20"] - moment["m10"]*x
-    u[0,2] = moment["m02"] - moment["m01"]*y
-    u[2,1] = moment["m21"] - 2*x*moment["m11"] - y*moment["m20"] + 2*(x**2)*moment["m01"]
-    u[1,2] = moment["m12"] - 2*y*moment["m11"] - x*moment["m02"] + 2*(y**2)*moment["m10"]
-    u[3,0] = moment["m30"] - 3*x*moment["m20"] + 2*(x**2)*moment["m10"]
-    u[0,3] = moment["m03"] - 3*y*moment["m02"] + 2*(y**2)*moment["m01"]
-
-    # Calculate normalized moments
-    n = np.zeros((4,4))
-    for p,q in [[1,1],[2,0],[0,2],[2,1],[1,2],[3,0],[0,3]]:
-        l = 1 + (p + q)/2
-        n[p,q] = u[p,q]/(moment["m00"]**l)
-
-    # Calculate features
-    phi = np.zeros(7)
-    phi[0] = n[2,0] + n[0,2]
-    phi[1] = ((n[2,0] + n[0,2])**2) + 4*n[1,1]**2
-    phi[2] = ((n[3,0]-3*n[1,2])**2) + (3*n[2,1]-n[0,3])**2
-    phi[3] = ((n[3,0]+n[1,2])**2) +(n[2,1]+n[0,3])**2
-    phi[4] = (n[3,0]-3*n[1,2])*(n[3,0]+n[1,2])*(((n[3,0]+n[1,2])**2)-3*(n[2,1]+n[0,3])**2) +\
-             (3*n[2,1]-n[0,3])*(n[2,1]+n[0,3])*((3*(n[3,0]+n[1,2])**2)-(n[2,1]+n[0,3])**2)
-    phi[5] = (n[2,0]-n[0,2])*(((n[3,0]+n[1,2])**2)-(n[2,1]+n[0,3])**2) +\
-             4*n[1,1]*(n[3,0]+n[1,2])*(n[2,1]+n[0,3])
-    phi[6] = (3*n[2,1]-n[0,3])*(n[3,0]+n[1,2])*(((n[3,0]+n[1,2])**2)-3*(n[2,1]+n[0,3])**2) +\
-             (3*n[1,2]-n[3,0])*(n[2,1]+n[0,3])*((3*(n[3,0]+n[1,2])**2)-(n[2,1]+n[0,3])**2)
-
-    return phi
-
-def imshow_components(labels):
-    # Ref: https://stackoverflow.com/questions/46441893/connected-component-labeling-in-python
-    """
-        Seizure warning! Because the label number changes order each frame, flashing bright color is possible
-    """
-    # Map component labels to hue val
-    label_hue = np.uint8(255*labels/np.max(labels))
-    blank_ch = 255*np.ones_like(label_hue)
-    labeled_img = cv.merge([label_hue, blank_ch, blank_ch])
-
-    # cvt to BGR for display
-    labeled_img = cv.cvtColor(labeled_img, cv.COLOR_HSV2BGR)
-
-    # set bg label to black
-    labeled_img[label_hue==0] = 0
-
-    return labeled_img
 
 if __name__ == "__main__":
     rospy.init_node("Feature_tracking")
@@ -146,14 +180,20 @@ if __name__ == "__main__":
     while not CTRL_C:
         ret, frame = cap.read()
 
-        binary = binary_classification(frame, bi_threshold)
+        # Binary segmentation
+        # filtered = color_classification(frame)
+        filtered = binary_classification(frame, bi_threshold)
+        labels = image_representation(filtered)
 
-        moments_and_contours = image_representation(binary)
+        # Scene interpretation
+        centers, huMoments, contours = feature_extraction(labels)
 
-        calculate_feature(moments_and_contours[0][0])
-        result = draw_contours(frame, moments_and_contours)
+        # Draw contours
+        # result = draw_contours(frame, centers, huMoments, contours)
+        boxes = draw_boxes(frame, centers, huMoments, contours)
 
-        cv.imshow('frame', result)
+        cv.imshow('frame', np.hstack((boxes, cv.cvtColor(filtered, cv.COLOR_GRAY2BGR))))
+        # cv.imshow('frame', np.hstack((boxes, filtered)))
 
         if cv.waitKey(1) & 0xFF == ord('q'):
             cap.release()
