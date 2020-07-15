@@ -31,20 +31,36 @@ def calc_circularity(contour):
 
 	return circularity
 
+def calc_aspectRatio(contour):
+	rect = cv.minAreaRect(contour)
+	box = cv.boxPoints(rect)
+	box = np.int0(box)
+	_,_,w,h = cv.boundingRect(box)
+	
+	return min((w,h))/float(max((w,h)))
+
+def calc_InterestPoint(cropped):
+	gray = cv.cvtColor(cropped, cv.COLOR_BGR2GRAY)
+	gray = np.float32(gray)
+	dst = cv.cornerHarris(gray, 2, 3, 0.04)
+	dst = cv.dilate(dst,None)
+	cropped[dst>0.01*dst.max()]=[0,0,255]
+	return cropped
+
 
 def draw_contours(original, thresh):
 	frame_copy = original.copy()
-	huMoments = []
+	features = []
 	_, contours, _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
 	cropped = None
 	for c in contours:
 		if check_square(c, 0.01):
 			cv.drawContours(frame_copy, c, -1, (0,255,0), 2)
-			cropped, contours = crop(thresh, c)
-			huMoments.append(get_huMoment(contours))
+			cropped, internal_contours = crop(thresh, c)
+			features.append(get_feature(internal_contours))
 			
 
-	return frame_copy, cropped, huMoments
+	return frame_copy, cropped, features
 
 def crop(frame, contour):
 	rect = cv.minAreaRect(contour)
@@ -68,26 +84,29 @@ def crop(frame, contour):
 
 	return cropped, internal_contours
 
-def get_huMoment(contours):
-	huMoments = []
+def get_feature(contours):
+	features = []
 	for cnt in contours:
 		moment = cv.moments(cnt)
 		huMoment = np.squeeze(cv.HuMoments(moment))
 
 		for i in range(len(huMoment)):
 			huMoment[i] = -1* math.copysign(1.0, huMoment[i]) * math.log10(abs(huMoment[i]+np.finfo(float).eps))
-		
-		huMoments.append(huMoment)
+		feature = huMoment[:-1]
+		feature = np.append(feature, calc_circularity(cnt))
+		feature = np.append(feature, calc_aspectRatio(cnt))
+		features.append(feature)
 
-	return huMoments
+	return features
 
 
 if __name__ == "__main__":
-	img = cv.imread("../images/Sign_Stop.png")
+	img = cv.imread("../images/Sign_Heart.png")
 	thresh = binary_classification(img, 177)
-	drawn, cropped, huMoments = draw_contours(img, thresh)
-	print(huMoments[0])
+	drawn, cropped, features = draw_contours(img, thresh)
+	dst = calc_InterestPoint(cropped)
+	# print(features[0])
 
-	cv.imshow('image', cropped)
+	cv.imshow('image', dst)
 	cv.waitKey(0)
 	cv.destroyAllWindows()
