@@ -12,7 +12,7 @@ from sensor_msgs.msg import Image
 # Hu Moments for each sign
 Sign_Turn_Left = np.array([0.60051821, 1.77938078, 2.41080726, 3.57778346, -6.57837756, -4.47255285, -7.34397072])
 Sign_Turn_Right = np.array([0.60582587, 1.82948018, 2.41594102, 3.60746856, -6.62084558, -4.55277538, -7.67673815])
-Sign_25 = np.array([0.32807563, 1.2390984, 3.26559887, 3.90878974, 7.74434791, 5.08009115, -7.57928918])
+Sign_25 = np.array([0.28084779, 1.12422052, 3.21248886, 4.11457667, 9.43927957, -5.0649046, 0.13883748, 0.67261905])
 Sign_75 = np.array([0.20836988, 0.79547836, 0.83454143, 1.53649249, 2.82159092, 1.98131614, -2.93918862])
 Sign_100 = np.array([0.30514208, 0.72741868, 1.8562603, 2.32033954, 4.42215648, 2.6869574, -5.01829956])
 Sign_Stop = np.array([0.38214421, 1.74043268, 3.61796505, 5.32510358, 10.03675349, 7.06024509, 9.88390894])
@@ -28,7 +28,7 @@ Sign_Triangle = np.array([0.71526353, 4.13538047, 2.34029664, 5.62641892, 9.6097
 
 
 OFFSET = 0 # Crop image offset to remove left over black boarder
-AREA_CUTOFF = 50 # Contours must have greater than area cutoff (pixel^2) to be considered
+AREA_CUTOFF = 200 # Contours must have greater than area cutoff (pixel^2) to be considered
 
 def shutdown_hook():
     cv.destroyAllWindows()
@@ -36,7 +36,7 @@ def shutdown_hook():
 def binary_classification(frame, threshold):
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
     _ , thresh = cv.threshold(gray, threshold, 255, cv.THRESH_BINARY)
-  
+
     return thresh
 
 def check_square(contour, tol):
@@ -45,12 +45,12 @@ def check_square(contour, tol):
 
 	diff = (cir - target)**2
 
-	return diff <= tol 
+	return diff <= tol
 
 def calc_circularity(contour):
 	area = cv.contourArea(contour)
 	parim = cv.arcLength(contour, closed=True)
-	
+
 	if area >= AREA_CUTOFF:
 		circularity = 4*math.pi*area/float(parim**2)
 	else:
@@ -63,7 +63,7 @@ def calc_aspectRatio(contour):
 	box = cv.boxPoints(rect)
 	box = np.int0(box)
 	_,_,w,h = cv.boundingRect(box)
-	
+
 	return min((w,h))/float(max((w,h)))
 
 def draw_contours(original, thresh):
@@ -79,7 +79,7 @@ def draw_contours(original, thresh):
 			if cropped is not None:
 				cv.imshow('Cropped', cropped)
 				cv.waitKey(1)
-			
+
 
 	return frame_copy, cropped, features
 
@@ -129,7 +129,7 @@ def detect_sign(image):
 
 	binary = binary_classification(cv_image, 177)
 	drawn, _, blobs = draw_contours(cv_image, binary)
-	
+
 	# Brute-Force Feature Matching
 	candidates = []
 	for blob in blobs:
@@ -155,10 +155,8 @@ def detect_sign(image):
 		signs = ["5 Points Star","8 Points Star","Arc","Arrow","Heart","Octagon", "Triangle"]
 		if result[0] <= 1:
 			rospy.loginfo("Math Found! It's sign " + signs[result[1]%8])
-		else:
-			rospy.loginfo(result)
 
-	
+
 	cv.imshow('Vidoe/Debug', np.hstack((drawn, cv.cvtColor(binary, cv.COLOR_GRAY2BGR))))
 	cv.waitKey(1)
 
@@ -166,7 +164,7 @@ def detect_sign(image):
 if __name__ == "__main__":
 	rospy.init_node("Sign_Detector")
 
-	rospy.Subscriber("/camera/rgb/image_raw", Image, detect_sign)
+	rospy.Subscriber("/usb_cam/image_raw", Image, detect_sign)
 
 	rospy.on_shutdown(shutdown_hook)
 

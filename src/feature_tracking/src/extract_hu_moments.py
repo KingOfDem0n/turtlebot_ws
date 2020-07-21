@@ -9,7 +9,7 @@ OFFSET = 0 # Crop image offset to remove left over black boarder
 def binary_classification(frame, threshold):
     gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
     _ , thresh = cv.threshold(gray, threshold, 255, cv.THRESH_BINARY)
-  
+
     return thresh
 
 def check_square(contour, tol):
@@ -18,12 +18,12 @@ def check_square(contour, tol):
 
 	diff = (cir - target)**2
 
-	return diff <= tol 
+	return diff <= tol
 
 def calc_circularity(contour):
 	area = cv.contourArea(contour)
 	parim = cv.arcLength(contour, closed=True)
-	
+
 	if area >= 50:
 		circularity = 4*math.pi*area/float(parim**2)
 	else:
@@ -36,7 +36,7 @@ def calc_aspectRatio(contour):
 	box = cv.boxPoints(rect)
 	box = np.int0(box)
 	_,_,w,h = cv.boundingRect(box)
-	
+
 	return min((w,h))/float(max((w,h)))
 
 def calc_InterestPoint(cropped):
@@ -58,7 +58,7 @@ def draw_contours(original, thresh):
 			cv.drawContours(frame_copy, c, -1, (0,255,0), 2)
 			cropped, internal_contours = crop(thresh, c)
 			features.append(get_feature(internal_contours))
-			
+
 
 	return frame_copy, cropped, features
 
@@ -74,7 +74,7 @@ def crop(frame, contour):
 
 	cropped = cv.cvtColor(cropped, cv.COLOR_GRAY2BGR)
 	internal_contours = []
-	
+
 	for i in range(hierarchy.shape[0]):
 		if hierarchy[i][3] > -1:
 			cv.drawContours(cropped, contours[i], -1, (0,255,0), 2)
@@ -101,12 +101,12 @@ def get_feature(contours):
 
 
 if __name__ == "__main__":
-	img = cv.imread("../images/Sign_Heart.png")
+	img = cv.imread("../images/Sign 25.png")
 	thresh = binary_classification(img, 177)
 	drawn, cropped, features = draw_contours(img, thresh)
-	dst = calc_InterestPoint(cropped)
-	# print(features[0])
+	# dst = calc_InterestPoint(cropped)
+	print(features[0])
 
-	cv.imshow('image', dst)
+	cv.imshow('image', cropped)
 	cv.waitKey(0)
 	cv.destroyAllWindows()
